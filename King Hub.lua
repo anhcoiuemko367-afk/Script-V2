@@ -567,6 +567,55 @@ if getgenv then
     end
 end
 
+-- [[ NGỤY TRANG MÔI TRƯỜNG VÀ BẢO VỆ CẤU TRÚC GAME ]]
+
+local function BypassGameScanner()
+    -- Kiểm tra xem Executor có hỗ trợ các hàm can thiệp nâng cao không
+    if not getrawmetatable or not hookmetamethod or not newcclosure then 
+        warn("Executor của bạn thiếu các hàm can thiệp cần thiết để ngụy trang bảo mật.")
+        return 
+    end
+
+    local rawMT = getrawmetatable(game)
+    local oldIndex = rawMT.__index
+    local oldNewIndex = rawMT.__newindex
+    local oldNameCall = rawMT.__namecall
+
+    -- 1. Ẩn thư mục lưu trữ giao diện ẩn của phần mềm hack (CoreGui)
+    -- Khi game quét các vật thể lạ trong game, chúng ta sẽ trả về kết quả giả như không có gì tồn tại
+    setreadonly(rawMT, false)
+    
+    rawMT.__index = newcclosure(function(self, key)
+        if not checkcaller() then
+            -- Nếu script của game cố tình tìm kiếm các phân vùng bảo mật hoặc CoreGui, trả về nil (không tìm thấy)
+            if tostring(self) == "CoreGui" or tostring(self) == "RobloxGui" then
+                return nil
+            end
+        end
+        return oldIndex(self, key)
+    end)
+
+    -- 2. Ngăn chặn game phát hiện việc chỉnh sửa hoặc chèn thêm dữ liệu (Hooking Protection)
+    rawMT.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if not checkcaller() then
+            -- Chặn các lệnh gửi tín hiệu báo cáo (Report/Log) bất thường từ game về Server
+            if method == "FireServer" and (tostring(self):lower():find("kick") or tostring(self):lower():find("cheat") or tostring(self):lower():find("detection")) then
+                return nil -- Hủy gói tin báo cáo lỗi hack
+            end
+        end
+        return oldNameCall(self, unpack(args))
+    end)
+    
+    setreadonly(rawMT, true)
+    print("Hệ thống ngụy trang môi trường đã được thiết lập.")
+end
+
+-- Kích hoạt hệ thống ngụy trang trước khi chạy các phần logic khác của script
+pcall(BypassGameScanner)
+
 -- ============ LƯU CẤU HÌNH ============
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
